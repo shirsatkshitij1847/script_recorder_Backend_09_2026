@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import { createUser } from "./createUser.js";
 import { createVersion } from "./createVersion.js";
 import { getUsers } from "./getUsers.js";
-import { getAllResults, listResultFiles } from "./getAllResults.js";
+import { getAllResults, listVersionFolders } from "./getAllResults.js";
 import { getHtmlFile } from "./getResultByFileName.js";
 import { getVersions } from "./getVersions.js";
 
@@ -73,22 +73,22 @@ app.get("/api/results/:version", async (req, res) => {
   }
 });
 
-// GET /api/users/:user/:version/files - list result file names under a user's version (no content)
-app.get("/api/users/:user/:version/files", async (req, res) => {
+// List immediate folder names under a user's version without fetching contents.
+app.get(["/api/users/:user/:version/folders", "/api/users/:user/:version/files"], async (req, res) => {
   try {
     const { user, version } = req.params;
-    const result = await listResultFiles(user, version);
+    const result = await listVersionFolders(user, version);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// GET /api/users/:user/:version/:fileName - get a test result HTML file by name
-app.get("/api/users/:user/:version/:fileName", async (req, res) => {
+// GET /api/users/:user/:version/:testExecutionId/:fileName - get an execution result file
+app.get("/api/users/:user/:version/:testExecutionId/:fileName", async (req, res) => {
   try {
-    const { user, version, fileName } = req.params;
-    const html = await getHtmlFile(user, version, fileName);
+    const { user, version, testExecutionId, fileName } = req.params;
+    const html = await getHtmlFile(user, version, testExecutionId, fileName);
     res.type("html").send(html);
   } catch (error) {
     res.status(404).json({ error: error.message });

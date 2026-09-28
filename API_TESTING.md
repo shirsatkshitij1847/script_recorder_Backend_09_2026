@@ -42,6 +42,54 @@ node traceViwerServer.js
 
 The API base URL defaults to `http://localhost:7000`. The trace viewer defaults to `http://localhost:7001`.
 
+## Test with the Current S3 Data
+
+The following examples use the user and version shown in the S3 bucket: `kshitijshirsat1847/2704`.
+
+Check that the API is running:
+
+```powershell
+Invoke-RestMethod "http://localhost:7000/api/health"
+```
+
+List the execution folders under that version. This endpoint returns folder names only; it does not return the files inside them:
+
+```powershell
+$folders = Invoke-RestMethod "http://localhost:7000/api/users/kshitijshirsat1847/2704/folders"
+$folders.folders
+```
+
+Example response:
+
+```json
+{
+  "user": "kshitijshirsat1847",
+  "version": "2704",
+  "folders": [
+    "testexecution05aadd03bf1143",
+    "testexecution3dd1e1f5959249",
+    "testexecution46152de4fd6a48",
+    "testexecution4a76950a4df74f"
+  ]
+}
+```
+
+To retrieve result files and their contents, call the version results endpoint. It returns results for **all users** for that version, so filter the response by user:
+
+```powershell
+$results = Invoke-RestMethod "http://localhost:7000/api/results/2704"
+$userResults = $results.users | Where-Object { $_.user -eq "kshitijshirsat1847" }
+$userResults | ConvertTo-Json -Depth 20
+```
+
+Each entry in `files` contains an S3 `key`, object `tags`, and `content`. To display only files from one execution folder:
+
+```powershell
+$userResults.files | Where-Object {
+    $_.key -like "*/testexecution3dd1e1f5959249/*"
+} | ConvertTo-Json -Depth 20
+```
+
 ## API Routes
 
 Requests do not require authentication in this application. All routes below are handled by `server.js`.
@@ -121,13 +169,13 @@ Returns objects under the requested version for every user. Each file includes i
 {
   "users": [
     {
-      "user": "shirsat1847",
-      "version": "2607",
+      "user": "kshitijshirsat1847",
+      "version": "2704",
       "files": [
         {
-          "key": "shirsat1847/2607/result.json",
-          "tags": { "TransactionType": "MoveTransaction" },
-          "content": {}
+          "key": "kshitijshirsat1847/2704/testexecution3dd1e1f5959249/testexecution3dd1e1f5959249.html",
+          "tags": {},
+          "content": "<html>..."
         }
       ]
     }
@@ -135,24 +183,42 @@ Returns objects under the requested version for every user. Each file includes i
 }
 ```
 
-### `GET /api/users/:user/:version/files`
+### `GET /api/users/:user/:version/folders`
 
-Lists file names under a user's version without fetching their contents.
+Lists only the immediate folder names under a user's version. It does not list or fetch files inside those folders. The older `/api/users/:user/:version/files` path is retained as an alias and returns the same response.
 
 ```json
 {
-  "user": "shirsat1847",
-  "version": "2607",
-  "files": ["result.json", "result.html"]
+  "user": "kshitijshirsat1847",
+  "version": "2704",
+  "folders": [
+    "testexecution05aadd03bf1143",
+    "testexecution3dd1e1f5959249",
+    "testexecution46152de4fd6a48",
+    "testexecution4a76950a4df74f"
+  ]
 }
 ```
 
-### `GET /api/users/:user/:version/:fileName`
+### `GET /api/users/:user/:version/:testExecutionId/:fileName`
 
-Returns the named object as an HTML response. For example: `/api/users/shirsat1847/2607/result.html`. Handler errors are returned as `404` JSON:
+Returns the named file from the specified test execution folder as an HTML response. The S3 key is `user/version/testExecutionId/fileName`. Execution HTML files use the execution ID as the filename, for example:
+
+```text
+GET /api/users/kshitijshirsat1847/2704/testexecution3dd1e1f5959249/testexecution3dd1e1f5959249.html
+```
+
+PowerShell request:
+
+```powershell
+$url = "http://localhost:7000/api/users/kshitijshirsat1847/2704/testexecution3dd1e1f5959249/testexecution3dd1e1f5959249.html"
+Invoke-WebRequest $url
+```
+
+Handler errors are returned as `404` JSON:
 
 ```json
-{ "error": "File \"result.html\" not found" }
+{ "error": "<S3 error message>" }
 ```
 
 ## Trace Viewer Routes
@@ -184,8 +250,8 @@ curl -X POST http://localhost:7000/api/users/shirsat1847
 curl -X POST http://localhost:7000/api/users/shirsat1847/2607
 curl http://localhost:7000/api/users/shirsat1847/versions
 curl http://localhost:7000/api/results/2607
-curl http://localhost:7000/api/users/shirsat1847/2607/files
-curl http://localhost:7000/api/users/shirsat1847/2607/result.html
+curl http://localhost:7000/api/users/shirsat1847/2607/folders
+curl http://localhost:7000/api/users/kshitijshirsat1847/2704/testexecution3dd1e1f5959249/testexecution3dd1e1f5959249.html
 curl http://localhost:7001/sessions
 ```
 

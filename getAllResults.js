@@ -65,22 +65,31 @@ async function getFilesUnderPrefix(prefix) {
   return contents;
 }
 
-// List all result file names present under a user/version (no content fetch)
-export async function listResultFiles(userName, version) {
+// List immediate folder names under a user/version without listing their contents.
+export async function listVersionFolders(userName, version) {
   const prefix = `${userName}/${version}/`;
+  const folders = [];
+  let continuationToken;
 
-  const listResult = await s3.send(
-    new ListObjectsV2Command({
-      Bucket: bucketName,
-      Prefix: prefix,
-    })
-  );
+  do {
+    const listResult = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucketName,
+        Prefix: prefix,
+        Delimiter: "/",
+        ContinuationToken: continuationToken,
+      })
+    );
 
-  const files = (listResult.Contents || [])
-    .filter((file) => file.Key !== prefix)
-    .map((file) => file.Key.split("/").pop());
+    folders.push(
+      ...(listResult.CommonPrefixes || []).map((folder) =>
+        folder.Prefix.slice(prefix.length).replace(/\/$/, "")
+      )
+    );
+    continuationToken = listResult.NextContinuationToken;
+  } while (continuationToken);
 
-  return { user: userName, version, files };
+  return { user: userName, version, folders };
 }
 
 // Get all result files under a specific user/version
