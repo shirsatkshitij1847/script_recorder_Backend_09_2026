@@ -6,11 +6,17 @@ import { getUsers } from "./getUsers.js";
 import { getAllResults, listVersionFolders } from "./getAllResults.js";
 import { getHtmlFile } from "./getResultByFileName.js";
 import { getVersions } from "./getVersions.js";
+import { getObjectTags } from "./getResultTag.js";
+import { downloadTrace } from "./downloadTrace.js";
+import { registerTraceViewerRoutes } from "./traceViwerServer.js";
+import { pipeline } from "node:stream/promises";
+import { createReadStream } from "node:fs";
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
+registerTraceViewerRoutes(app, downloadTrace);
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
@@ -84,11 +90,44 @@ app.get(["/api/users/:user/:version/folders", "/api/users/:user/:version/files"]
   }
 });
 
-// GET /api/users/:user/:version/:testExecutionId/:fileName - get an execution result file
-app.get("/api/users/:user/:version/:testExecutionId/:fileName", async (req, res) => {
+// GET /api/users/:user/:version/:testExecutionId/trace - download an execution trace ZIP
+app.get("/api/users/:user/:version/:testExecutionId/trace", async (req, res) => {
+  const { user, version, testExecutionId } = req.params;
+
   try {
-    const { user, version, testExecutionId, fileName } = req.params;
-    const html = await getHtmlFile(user, version, testExecutionId, fileName);
+    const tracePath = await downloadTrace(version, user, testExecutionId);
+    res.attachment(`${testExecutionId}.zip`);
+    res.type("application/zip");
+    await pipeline(createReadStream(tracePath), res);
+  } catch (error) {
+    if (res.headersSent) {
+      res.destroy(error);
+      return;
+    }
+
+    res.status(error.$metadata?.httpStatusCode === 404 ? 404 : 500)
+      .json({ error: error.message });
+  }
+});
+
+// GET /api/users/:user/:version/:testExecutionId/tags - get HTML result tags
+app.get("/api/users/:user/:version/:testExecutionId/tags", async (req, res) => {
+  try {
+    const { user, version, testExecutionId } = req.params;
+    const fileName = `${testExecutionId}.html`;
+    const tags = await getObjectTags(user, version, testExecutionId, fileName);
+    res.json({ tags });
+  } catch (error) {
+    res.status(error.$metadata?.httpStatusCode === 404 ? 404 : 500)
+      .json({ error: error.message });
+  }
+});
+
+// GET /api/users/:user/:version/:testExecutionId - get the execution HTML file
+app.get("/api/users/:user/:version/:testExecutionId", async (req, res) => {
+  try {
+    const { user, version, testExecutionId } = req.params;
+    const html = await getHtmlFile(user, version, testExecutionId);
     res.type("html").send(html);
   } catch (error) {
     res.status(404).json({ error: error.message });
@@ -97,5 +136,7 @@ app.get("/api/users/:user/:version/:testExecutionId/:fileName", async (req, res)
 
 const PORT = process.env.PORT || 7000;
 app.listen(PORT, () => {
+  console.log(PORT);
+  
     console.log(`Server is running on port ${PORT}`);
 });

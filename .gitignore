@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+traces/
 
 # Local environment variables and secrets
 .env
