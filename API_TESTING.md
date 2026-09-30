@@ -182,7 +182,7 @@ Returns objects under the requested version for every user. Each file includes i
 
 ### `GET /api/users/:user/:version/folders`
 
-Lists only the immediate folder names under a user's version. It does not list or fetch files inside those folders. The older `/api/users/:user/:version/files` path is retained as an alias and returns the same response.
+Lists only the immediate folder names under a user's version, ordered by the earliest S3 object modification date in each folder (newest first). It reads object metadata to determine the order but does not fetch file contents. The older `/api/users/:user/:version/files` path is retained as an alias and returns the same response.
 
 ```json
 {

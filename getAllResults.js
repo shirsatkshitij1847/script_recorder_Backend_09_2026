@@ -81,15 +81,34 @@ export async function listVersionFolders(userName, version) {
       })
     );
 
-    folders.push(
-      ...(listResult.CommonPrefixes || []).map((folder) =>
-        folder.Prefix.slice(prefix.length).replace(/\/$/, "")
-      )
-    );
+    folders.push(...(listResult.CommonPrefixes || []).map((folder) => folder.Prefix));
     continuationToken = listResult.NextContinuationToken;
   } while (continuationToken);
 
-  return { user: userName, version, folders };
+  const datedFolders = [];
+  for (const folderPrefix of folders) {
+    let addedAt = Infinity;
+    let folderToken;
+    do {
+      const result = await s3.send(
+        new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: folderPrefix,
+          ContinuationToken: folderToken,
+        })
+      );
+      for (const object of result.Contents || []) {
+        if (object.LastModified) {
+          addedAt = Math.min(addedAt, new Date(object.LastModified).getTime());
+        }
+      }
+      folderToken = result.NextContinuationToken;
+    } while (folderToken);
+    datedFolders.push({ name: folderPrefix.slice(prefix.length).replace(/\/$/, ""), addedAt });
+  }
+
+  datedFolders.sort((first, second) => second.addedAt - first.addedAt || first.name.localeCompare(second.name));
+  return { user: userName, version, folders: datedFolders.map((folder) => folder.name) };
 }
 
 // Get all result files under a specific user/version
